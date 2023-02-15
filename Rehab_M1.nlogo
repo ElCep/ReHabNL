@@ -14,6 +14,7 @@ globals[
   nbharvester
   nbBirds
   possiblePatches
+  harvestCapacity
 
   ;;stat
   nbBreeding
@@ -59,6 +60,7 @@ to setup-globals
   set biomassList [1 1 2 1 1 2 0 2 3 2 1 3 1 2 1 1 3 1 0 2]
   set nbharvester nbharversters-I
   set nbBirds 8
+  set harvestCapacity 1 ;(random 2) + 1
   set-default-shape clans "house"
   set-default-shape harvesters "person"
   set-default-shape birds "butterfly"
@@ -120,9 +122,9 @@ end
 
 to updateGrideColor
   ask patches [
-    set attendance [0 0 0]
-   if  biomass = 0 [
-     set pcolor white
+   set attendance [0 0 0]
+    if biomass = 0[
+     set pcolor 9
     ]
     if biomass = 1 [
      set pcolor 68
@@ -137,7 +139,7 @@ to updateGrideColor
 end
 
 to go
-  if ticks > 5 [stop]
+  if ticks > 4 [stop]
   ask patches[
     growBiomass
   ]
@@ -146,8 +148,9 @@ to go
   harvestersHarvest
   birdReproduce
   stat
-  updateGrideColor
+
   plotIG
+
   tick
 end
 
@@ -157,6 +160,7 @@ to harvestersHarvest ; observer context
   ;; un membre de la famille, peut aller sur une case au hasard
   ;; et prendre la biomasse prendre toute la récolte
   if strategie = 1 [ ; blind
+    show "stratégie 1 - blind"
     let patchesHarvestable patches with [biomass > 0]
 
     ask clans [
@@ -164,7 +168,7 @@ to harvestersHarvest ; observer context
         ask myharvesters [
           move-to (one-of patchesHarvestable)
           let pbiomass [biomass] of patch-here
-          set myharvest (random 2) + 1
+          set myharvest harvestCapacity
           ask patch-here [
             ifelse biomass >= [myharvest] of myself[
               set biomass  biomass - pbiomass
@@ -190,26 +194,34 @@ to harvestersHarvest ; observer context
     let patchesHarvestable patches with [biomass > 0]
 
     ask clans [
-      if (count patchesHarvestable > 0) [
+      ifelse (count patchesHarvestable > 0) [ ;s'il n'ya plus de biomass ils ne sortent plus
         ask myharvesters [
           move-to (one-of patchesHarvestable with-max [biomass])
           let pbiomass [biomass] of patch-here
-          let potentialHarvest (random 2) + 1
           ;set myharvest (random 2) + 1
           ask patch-here [
-            ifelse biomass >= potentialHarvest[
-              set biomass  biomass - pbiomass
+            ifelse biomass >= harvestCapacity[
+              set biomass  biomass - harvestCapacity
               ask myself [
-               set myharvest myharvest +  potentialHarvest
+               set myharvest myharvest +  harvestCapacity
               ]
-
+              set biomass  biomass - harvestCapacity
             ][
-              set biomass  biomass - 1
+              ask myself [
+                set myharvest myharvest + [biomass] of patch-here
+              ]
+              set biomass  0
             ]
           ]
         ]
         set CumulatedHarbest sum [myharvest] of myharvesters
+      ][
+       ask myharvesters [
+          set myPenalty myPenalty + 1
+        ]
       ]
+      set CumulatedHarbest sum [myharvest] of myharvesters
+      set CumulatedPenalty sum [myPenalty] of myharvesters
     ]
   ]
 
@@ -239,7 +251,7 @@ to harvestersHarvest ; observer context
      set CumulatedHarbest sum [myharvest] of myharvesters
     ]
   ]
-
+updateGrideColor
 end
 
 to birdsSettle ;; Observer context
@@ -317,8 +329,18 @@ to plotIG
       plotxy ticks CumulatedPenalty
 ;    ]
   ]
-  set-plot-pen-color red
-  plotxy ticks mean [CumulatedPenalty] of clans
+;  set-plot-pen-color red
+;  plotxy ticks mean [CumulatedPenalty] of clans
+
+  set-current-plot "Harvested"
+  ask clans [
+;    if any? CumulatedPenalty [
+      set-plot-pen-color color ;pour renvoyer la couleur du fermier
+      plotxy ticks CumulatedHarbest
+;    ]
+  ]
+;  set-plot-pen-color red
+;  plotxy ticks mean [CumulatedPenalty] of clans
 end
 @#$#@#$#@
 GRAPHICS-WINDOW
@@ -448,19 +470,18 @@ PLOT
 265
 580
 415
-Min/Max Harvested
+Harvested
 NIL
 NIL
 0.0
 10.0
 0.0
-10.0
+15.0
 true
-true
+false
 "" ""
 PENS
-"Min" 1.0 0 -13345367 true "" "plot minharvest"
-"max" 1.0 0 -5298144 true "" "plot maxharvest"
+"Min" 1.0 2 -13345367 true "" ""
 
 SLIDER
 570
