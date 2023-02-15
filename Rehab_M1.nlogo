@@ -34,11 +34,13 @@ patches-own[
 
 clans-own[
  CumulatedHarbest ; int 0
-  myharvesters
+  CumulatedPenalty ; int 0
+  myharvesters ; list of harvester
 ]
 
 harvesters-own[
   myharvest ;int 0
+  myPenalty ; int 0
   myClan ;int how
 ]
 
@@ -55,7 +57,7 @@ naturalists-own[
 
 to setup-globals
   set biomassList [1 1 2 1 1 2 0 2 3 2 1 3 1 2 1 1 3 1 0 2]
-  set nbharvester 20
+  set nbharvester nbharversters-I
   set nbBirds 8
   set-default-shape clans "house"
   set-default-shape harvesters "person"
@@ -77,23 +79,11 @@ to setup
     ]
   ]
 
-  ask patches [
-   if  biomass = 0 [
-     set pcolor white
-    ]
-    if biomass = 1 [
-     set pcolor 68
-    ]
-    if biomass = 2 [
-     set pcolor 66
-    ]
-    if biomass = 3 [
-     set pcolor 64
-    ]
-  ]
+  updateGrideColor
 
   create-harvesters nbharvester [
     set myharvest 0
+    set myPenalty 0
     set myClan 0
   ]
 
@@ -118,10 +108,33 @@ to setup
 
   ask clans [
    set myharvesters harvesters with [myClan = [who] of myself]
+    ask myharvesters [
+      set color [color] of myself  + 1
+      setxy [pxcor] of myself [pycor] of myself
+    ]
   ]
+
   reset-ticks
+  plotIG
 end
 
+to updateGrideColor
+  ask patches [
+    set attendance [0 0 0]
+   if  biomass = 0 [
+     set pcolor white
+    ]
+    if biomass = 1 [
+     set pcolor 68
+    ]
+    if biomass = 2 [
+     set pcolor 66
+    ]
+    if biomass = 3 [
+     set pcolor 64
+    ]
+  ]
+end
 
 to go
   if ticks > 5 [stop]
@@ -133,12 +146,16 @@ to go
   harvestersHarvest
   birdReproduce
   stat
-  if not any? patches with [biomass > 0][stop]
-
+  updateGrideColor
+  plotIG
   tick
 end
 
 to harvestersHarvest ; observer context
+
+  ;; Stratégie 1 les récoles sont fait a l'aveugle.
+  ;; un membre de la famille, peut aller sur une case au hasard
+  ;; et prendre la biomasse prendre toute la récolte
   if strategie = 1 [ ; blind
     let patchesHarvestable patches with [biomass > 0]
 
@@ -156,13 +173,18 @@ to harvestersHarvest ; observer context
             ]
           ]
         ]
-        set CumulatedHarbest sum [myharvest] of myharvesters
+      ][
+        ask myharvesters [
+          set myPenalty myPenalty + 1
+        ]
       ]
-      [
-        ;stop
-      ]
+      set CumulatedHarbest sum [myharvest] of myharvesters
+      set CumulatedPenalty sum [myPenalty] of myharvesters
     ]
   ]
+
+  ;; La stratégie 2 est celle des LoneRider, Les agents vont sur les cases qui ont
+  ;; le plus de biomasse pour ramassé.
 
   if strategie = 2 [ ; LoneRider
     let patchesHarvestable patches with [biomass > 0]
@@ -190,6 +212,9 @@ to harvestersHarvest ; observer context
       ]
     ]
   ]
+
+  ;; La stratégie 3 est celle des opyimiser. Ils vont chercher les case ou il n'y a personnes
+  ;; ce qui leur permet d'être sur de ramassé.
 
   if strategie = 3 [ ; Optimizer
     let patchesHarvestable patches with [biomass > 0]
@@ -282,6 +307,18 @@ to stat
   set nbBreeding count birds - (count possiblePatches - 1)
   set minharvest min [CumulatedHarbest] of clans
   set maxharvest max [CumulatedHarbest] of clans
+end
+
+to plotIG
+  set-current-plot "Penalities"
+  ask clans [
+;    if any? CumulatedPenalty [
+      set-plot-pen-color color ;pour renvoyer la couleur du fermier
+      plotxy ticks CumulatedPenalty
+;    ]
+  ]
+  set-plot-pen-color red
+  plotxy ticks mean [CumulatedPenalty] of clans
 end
 @#$#@#$#@
 GRAPHICS-WINDOW
@@ -379,10 +416,10 @@ NIL
 
 PLOT
 380
-70
+110
 580
-220
-nombre de naissance
+260
+nombre de naissance d'oiseaux
 NIL
 NIL
 0.0
@@ -407,10 +444,10 @@ count harvesters
 11
 
 PLOT
-395
-255
-595
-405
+380
+265
+580
+415
 Min/Max Harvested
 NIL
 NIL
@@ -434,11 +471,40 @@ strategie
 strategie
 1
 4
-2.0
+1.0
 1
 1
 NIL
 HORIZONTAL
+
+INPUTBOX
+380
+45
+465
+105
+nbharversters-I
+20.0
+1
+0
+Number
+
+PLOT
+590
+265
+790
+415
+Penalities
+NIL
+NIL
+0.0
+10.0
+0.0
+10.0
+true
+false
+"" ""
+PENS
+"default" 1.0 2 -16777216 true "" ""
 
 @#$#@#$#@
 ## WHAT IS IT?
