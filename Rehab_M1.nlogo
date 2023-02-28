@@ -97,7 +97,7 @@ to setup
 
     set conterColor ifelse-value (conterColor < 140) [conterColor + 10] [conterColor - 139]
     set color conterColor
-    set task_list ["S1" "S2" "S3" "S2"]
+    set task_list ["S1" "S2" "S3" "S1"]
 
   ]
 
@@ -152,10 +152,9 @@ to go
     run next-task
   ]
   birdsSettle
-  harvestersHarvest
   birdReproduce
   stat
-
+  updateGrideColor
   plotIG
 
   tick
@@ -170,12 +169,6 @@ to updateTasks
   ]
 end
 
-to harvestersHarvest ; observer context
-
-
-
-updateGrideColor
-end
 
 to S1
   ;; Stratégie 1 les récoles sont fait a l'aveugle.
@@ -214,7 +207,6 @@ to S2
   show "stratégie 2- LoneRider"
   let patchesHarvestable patches with [biomass > 0]
 
-  ask clans [
     ifelse (count patchesHarvestable > 0) [ ;s'il n'ya plus de biomass ils ne sortent plus
       ask myharvesters [
         move-to (one-of patchesHarvestable with-max [biomass])
@@ -243,7 +235,6 @@ to S2
     ]
     set CumulatedHarbest sum [myharvest] of myharvesters
     set CumulatedPenalty sum [myPenalty] of myharvesters
-  ]
 
 end
 
@@ -253,7 +244,6 @@ to S3
 
    show "stratégie 3-Optimizer"
     let patchesHarvestable patches with [biomass > 0]
-    ask clans [
     ask myharvesters [
       if count patchesHarvestable with[not any? other harvesters-here] != 0 [
         move-to one-of patchesHarvestable with[not any? other harvesters-here]
@@ -272,7 +262,7 @@ to S3
       ]
     ]
      set CumulatedHarbest sum [myharvest] of myharvesters
-    ]
+
 end
 
 to birdsSettle ;; Observer context
@@ -434,7 +424,7 @@ nbClan
 nbClan
 1
 5
-1.0
+4.0
 1
 1
 NIL
@@ -525,7 +515,7 @@ INPUTBOX
 465
 105
 nbharversters-I
-1.0
+20.0
 1
 0
 Number
