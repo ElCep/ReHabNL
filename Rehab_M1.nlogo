@@ -37,6 +37,8 @@ clans-own[
  CumulatedHarbest ; int 0
   CumulatedPenalty ; int 0
   myharvesters ; list of harvester
+  next-task
+  task_list
 ]
 
 harvesters-own[
@@ -95,6 +97,7 @@ to setup
 
     set conterColor ifelse-value (conterColor < 140) [conterColor + 10] [conterColor - 139]
     set color conterColor
+    set task_list ["S1" "S2" "S3" "S2"]
 
   ]
 
@@ -144,6 +147,10 @@ to go
     growBiomass
   ]
 
+  ask clans [
+    updateTasks
+    run next-task
+  ]
   birdsSettle
   harvestersHarvest
   birdReproduce
@@ -154,81 +161,97 @@ to go
   tick
 end
 
+to updateTasks
+  ifelse not empty? task_list [
+    set next-task first task_list
+    set task_list but-first task_list
+  ][
+   stop
+  ]
+end
+
 to harvestersHarvest ; observer context
 
+
+
+updateGrideColor
+end
+
+to S1
   ;; Stratégie 1 les récoles sont fait a l'aveugle.
   ;; un membre de la famille, peut aller sur une case au hasard
   ;; et prendre la biomasse prendre toute la récolte
-  if strategie = 1 [ ; blind
-    show "stratégie 1 - blind"
-    let patchesHarvestable patches with [biomass > 0]
+  ; blind
+  show "stratégie 1 - blind"
+  let patchesHarvestable patches with [biomass > 0]
 
-    ask clans [
-      ifelse (count patchesHarvestable > 0) [
-        ask myharvesters [
-          move-to (one-of patchesHarvestable)
-          let pbiomass [biomass] of patch-here
-          set myharvest harvestCapacity
-          ask patch-here [
-            ifelse biomass >= [myharvest] of myself[
-              set biomass  biomass - pbiomass
-            ][
-              set biomass  biomass - 1
-            ]
-          ]
-        ]
-      ][
-        ask myharvesters [
-          set myPenalty myPenalty + 1
+  ifelse (count patchesHarvestable > 0) [
+    ask myharvesters [
+      move-to (one-of patchesHarvestable)
+      let pbiomass [biomass] of patch-here
+      set myharvest harvestCapacity
+      ask patch-here [
+        ifelse biomass >= [myharvest] of myself[
+          set biomass  biomass - pbiomass
+        ][
+          set biomass  biomass - 1
         ]
       ]
-      set CumulatedHarbest sum [myharvest] of myharvesters
-      set CumulatedPenalty sum [myPenalty] of myharvesters
+    ]
+  ][
+    ask myharvesters [
+      set myPenalty myPenalty + 1
     ]
   ]
+  set CumulatedHarbest sum [myharvest] of myharvesters
+  set CumulatedPenalty sum [myPenalty] of myharvesters
+end
 
+to S2
   ;; La stratégie 2 est celle des LoneRider, Les agents vont sur les cases qui ont
   ;; le plus de biomasse pour ramassé.
 
-  if strategie = 2 [ ; LoneRider
-    let patchesHarvestable patches with [biomass > 0]
+  show "stratégie 2- LoneRider"
+  let patchesHarvestable patches with [biomass > 0]
 
-    ask clans [
-      ifelse (count patchesHarvestable > 0) [ ;s'il n'ya plus de biomass ils ne sortent plus
-        ask myharvesters [
-          move-to (one-of patchesHarvestable with-max [biomass])
-          let pbiomass [biomass] of patch-here
-          ;set myharvest (random 2) + 1
-          ask patch-here [
-            ifelse biomass >= harvestCapacity[
-              set biomass  biomass - harvestCapacity
-              ask myself [
-               set myharvest myharvest +  harvestCapacity
-              ]
-              set biomass  biomass - harvestCapacity
-            ][
-              ask myself [
-                set myharvest myharvest + [biomass] of patch-here
-              ]
-              set biomass  0
+  ask clans [
+    ifelse (count patchesHarvestable > 0) [ ;s'il n'ya plus de biomass ils ne sortent plus
+      ask myharvesters [
+        move-to (one-of patchesHarvestable with-max [biomass])
+        let pbiomass [biomass] of patch-here
+        ;set myharvest (random 2) + 1
+        ask patch-here [
+          ifelse biomass >= harvestCapacity[
+            set biomass  biomass - harvestCapacity
+            ask myself [
+              set myharvest myharvest +  harvestCapacity
             ]
+            set biomass  biomass - harvestCapacity
+          ][
+            ask myself [
+              set myharvest myharvest + [biomass] of patch-here
+            ]
+            set biomass  0
           ]
-        ]
-        set CumulatedHarbest sum [myharvest] of myharvesters
-      ][
-       ask myharvesters [
-          set myPenalty myPenalty + 1
         ]
       ]
       set CumulatedHarbest sum [myharvest] of myharvesters
-      set CumulatedPenalty sum [myPenalty] of myharvesters
+    ][
+      ask myharvesters [
+        set myPenalty myPenalty + 1
+      ]
     ]
+    set CumulatedHarbest sum [myharvest] of myharvesters
+    set CumulatedPenalty sum [myPenalty] of myharvesters
   ]
 
+end
+
+to S3
   ;; La stratégie 3 est celle des opyimiser. Ils vont chercher les case ou il n'y a personnes
   ;; ce qui leur permet d'être sur de ramassé.
 
-  if strategie = 3 [ ; Optimizer
+   show "stratégie 3-Optimizer"
     let patchesHarvestable patches with [biomass > 0]
     ask clans [
     ask myharvesters [
@@ -250,8 +273,6 @@ to harvestersHarvest ; observer context
     ]
      set CumulatedHarbest sum [myharvest] of myharvesters
     ]
-  ]
-updateGrideColor
 end
 
 to birdsSettle ;; Observer context
@@ -413,7 +434,7 @@ nbClan
 nbClan
 1
 5
-3.0
+1.0
 1
 1
 NIL
@@ -504,7 +525,7 @@ INPUTBOX
 465
 105
 nbharversters-I
-20.0
+1.0
 1
 0
 Number
