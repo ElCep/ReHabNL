@@ -20,6 +20,7 @@ globals [
   total-biomass
   trajectory-data
   current-protected-ids
+  cap-one-resource?
 ]
 
 patches-own [
@@ -66,6 +67,13 @@ to setup-defaults
   if household-strategy-mode = 0 [ set household-strategy-mode "mixed" ]
   if ranger-strategy = 0 [ set ranger-strategy "manager" ]
   if not is-boolean? use-paper-initial-map? [ set use-paper-initial-map? true ]
+  if not is-boolean? cap-one-resource? [ set cap-one-resource? false ]
+
+  if household-count < 1 [ set household-count 5 ]
+  if harvesters-per-household < 1 [ set harvesters-per-household 4 ]
+  if max-rounds < 1 [ set max-rounds 5 ]
+  if protected-area-limit < 0 [ set protected-area-limit 3 ]
+
   set total-harvesters household-count * harvesters-per-household
 end
 
@@ -150,6 +158,7 @@ to go
   clear-round-state
   allocate-nests
   choose-protected-areas
+  refresh-household-strategies-from-input
   place-harvesters
   resolve-harvest
   compute-bird-reproduction
@@ -159,12 +168,6 @@ to go
   recolor-patches
   update-patch-labels
   record-trajectory-row
-
-  show "avant ask households"
-  show count households
-  ask households [
-   show  harvest-total
-  ]
 
   tick
 end
@@ -245,6 +248,12 @@ end
 to-report choose-target-patch [hh]
   let s [strategy] of hh
 
+  if s = "sobriety" [
+    report max-one-of patches [
+      (biomass * 100) - (length scheduled-households * 20)
+    ]
+  ]
+
   if s = "maximizer" [
     report max-one-of patches [biomass]
   ]
@@ -261,21 +270,14 @@ to-report choose-target-patch [hh]
   ]
 
   if s = "poacher" [
-    if any? patches with [protected?] [
-      report max-one-of patches with [protected?] [biomass]
-    ]
-    report max-one-of patches [biomass]
+  if any? patches with [protected?] [
+    report max-one-of (patches with [protected?]) [biomass]
   ]
+  report max-one-of patches [biomass]
+]
 
   if s = "fixed-plan" [
     report max-one-of patches [biomass]
-  ]
-
-  if s = "sobriety" [
-    if any? patches with [biomass = 1] [
-      report one-of patches with [biomass = 1]
-    ]
-    report min-one-of patches [biomass]
   ]
 
   report one-of patches
@@ -286,53 +288,70 @@ to resolve-harvest
     set harvested-this-round? true
 
     let queue shuffle scheduled-households
-    let n length queue
     let available biomass
 
-    if n = 1 [
-      let winner-id first queue
-      let gain min (list 2 available)
-
-      ask turtle winner-id [
-        set harvest-total harvest-total + gain
-        set harvest-last-round harvest-last-round + gain
+    if cap-one-resource? [
+      foreach queue [
+        winner-id ->
+        if available > 0 [
+          ask turtle winner-id [
+            set harvest-total harvest-total + 1
+            set harvest-last-round harvest-last-round + 1
+          ]
+          set available available - 1
+        ]
       ]
-
-      set biomass max (list 0 (biomass - gain))
+      set biomass available
     ]
 
-    if n > 1 [
-      if available = 1 [
+    if not cap-one-resource? [
+      let n length queue
+
+      if n = 1 [
         let winner-id first queue
+        let gain min (list 2 available)
+
         ask turtle winner-id [
-          set harvest-total harvest-total + 1
-          set harvest-last-round harvest-last-round + 1
+          set harvest-total harvest-total + gain
+          set harvest-last-round harvest-last-round + gain
         ]
-        set biomass 0
+
+        set biomass max (list 0 (biomass - gain))
       ]
 
-      if available = 2 [
-        let winner-id first queue
-        ask turtle winner-id [
-          set harvest-total harvest-total + 2
-          set harvest-last-round harvest-last-round + 2
+      if n > 1 [
+        if available = 1 [
+          let winner-id first queue
+          ask turtle winner-id [
+            set harvest-total harvest-total + 1
+            set harvest-last-round harvest-last-round + 1
+          ]
+          set biomass 0
         ]
-        set biomass 0
-      ]
 
-      if available = 3 [
-        let winner1 first queue
-        let winner2 item 1 queue
+        if available = 2 [
+          let winner-id first queue
+          ask turtle winner-id [
+            set harvest-total harvest-total + 2
+            set harvest-last-round harvest-last-round + 2
+          ]
+          set biomass 0
+        ]
 
-        ask turtle winner1 [
-          set harvest-total harvest-total + 2
-          set harvest-last-round harvest-last-round + 2
+        if available = 3 [
+          let winner1 first queue
+          let winner2 item 1 queue
+
+          ask turtle winner1 [
+            set harvest-total harvest-total + 2
+            set harvest-last-round harvest-last-round + 2
+          ]
+          ask turtle winner2 [
+            set harvest-total harvest-total + 1
+            set harvest-last-round harvest-last-round + 1
+          ]
+          set biomass 0
         ]
-        ask turtle winner2 [
-          set harvest-total harvest-total + 1
-          set harvest-last-round harvest-last-round + 1
-        ]
-        set biomass 0
       ]
     ]
   ]
@@ -400,16 +419,9 @@ end
 
 to recolor-one-patch
   if biomass = 0 [ set pcolor white ]
-  if biomass = 1 [ set pcolor 53 ]
-  if biomass = 2 [ set pcolor 63 ]
+  if biomass = 1 [ set pcolor 55 ]
+  if biomass = 2 [ set pcolor 65 ]
   if biomass = 3 [ set pcolor 67 ]
-
-  if newborns-last-round = 1 [ set pcolor sky ]
-  if newborns-last-round = 2 [ set pcolor violet ]
-
-  if protected? [ set pcolor yellow ]
-  if harvested-this-round? [ set pcolor red + 2 ]
-  if protected? and harvested-this-round? [ set pcolor orange ]
 end
 
 to update-patch-labels
@@ -470,10 +482,44 @@ to-report assign-household-strategy
 
   let draw random-float 1.0
   if draw < poacher-share [ report "poacher" ]
-  if draw < poacher-share + 0.38 [ report "maximizer" ]
-  if draw < poacher-share + 0.38 + 0.32 [ report "lone-rider" ]
-  if draw < poacher-share + 0.38 + 0.32 + 0.29 [ report "explorer" ]
+  if draw < poacher-share + 0.30 [ report "maximizer" ]
+  if draw < poacher-share + 0.30 + 0.25 [ report "lone-rider" ]
+  if draw < poacher-share + 0.30 + 0.25 + 0.20 [ report "explorer" ]
+  if draw < poacher-share + 0.30 + 0.25 + 0.20 + 0.15 [ report "sobriety" ]
   report "fixed-plan"
+end
+
+to refresh-household-strategies-from-input
+  if household-strategy-mode != "input-list" [ stop ]
+
+  let parsed-strategies parsed-household-strategy-list
+
+  ask households [
+    if hid <= length parsed-strategies [
+      set strategy item (hid - 1) parsed-strategies
+    ]
+    if hid > length parsed-strategies [
+      set strategy "maximizer"
+    ]
+    set label (word "H" hid ":" strategy)
+  ]
+end
+
+to-report parsed-household-strategy-list
+  let parsed read-from-string household-strategy-input
+
+  if not is-list? parsed [
+    error "household-strategy-input doit être une liste NetLogo valide"
+  ]
+
+  foreach parsed [
+    s ->
+    if not member? s ["maximizer" "poacher" "lone-rider" "sobriety" "explorer" "fixed-plan"] [
+      error (word "strategie inconnue: " s)
+    ]
+  ]
+
+  report parsed
 end
 
 to-report round-harvest
@@ -643,6 +689,7 @@ false
 "" ""
 PENS
 "default" 1.0 0 -16777216 true "" "plot total-biomass"
+"pen-1" 1.0 0 -7500403 true "" "plot 6"
 
 PLOT
 453
@@ -705,8 +752,8 @@ CHOOSER
 193
 household-strategy-mode
 household-strategy-mode
-"mixed" "maximizer" "lone-rider" "explorer" "poacher" "fixed-plan"
-4
+"input-list" "mixed" "maximizer" "lone-rider" "explorer" "poacher" "fixed-plan" "sobriety"
+0
 
 SLIDER
 27
@@ -726,7 +773,7 @@ HORIZONTAL
 SLIDER
 25
 237
-245
+203
 270
 harvesters-per-household
 harvesters-per-household
@@ -737,6 +784,17 @@ harvesters-per-household
 1
 NIL
 HORIZONTAL
+
+INPUTBOX
+25
+382
+415
+442
+household-strategy-input
+[\"maximizer\" \"maximizer\" \"poacher\" \"lone-rider\" \"sobriety\"]
+1
+0
+String
 
 @#$#@#$#@
 ## WHAT IS IT?
