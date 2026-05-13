@@ -2,14 +2,16 @@
 extensions [csv]
 
 breed [households household]
+breed [markers marker]
 
 globals [
+  household-count
+  harvesters-per-household
   round-number
   max-rounds
   total-harvesters
   protected-area-limit
   communication?
-  ranger-strategy
   protected-area-compliance
   poacher-share
   coordination-strength
@@ -21,6 +23,7 @@ globals [
   trajectory-data
   current-protected-ids
   cap-one-resource?
+  cumulative-protection-markers
 ]
 
 patches-own [
@@ -50,11 +53,14 @@ to setup
   set-patch-size 45
   setup-patches
   setup-households
+  update-protection-markers
   reset-metrics
   reset-ticks
 end
 
 to setup-defaults
+  set household-count 5
+  set harvesters-per-household 4
   if not is-number? max-rounds [ set max-rounds 5 ]
   if not is-number? household-count [ set household-count 5 ]
   if not is-number? protected-area-limit [ set protected-area-limit 3 ]
@@ -147,6 +153,7 @@ to reset-metrics
   set round-number 0
   set cumulative-harvest 0
   set cumulative-newborns 0
+  set cumulative-protection-markers 0
   set total-biomass sum [biomass] of patches
   set trajectory-data []
   set current-protected-ids []
@@ -158,6 +165,8 @@ to go
   clear-round-state
   allocate-nests
   choose-protected-areas
+  update-protection-markers
+  set cumulative-protection-markers cumulative-protection-markers + count markers
   refresh-household-strategies-from-input
   place-harvesters
   resolve-harvest
@@ -168,7 +177,6 @@ to go
   recolor-patches
   update-patch-labels
   record-trajectory-row
-
   tick
 end
 
@@ -200,33 +208,64 @@ end
 
 to choose-protected-areas
   set current-protected-ids []
-  if round-number = 1 [ stop ]
-  if ranger-strategy = "no-action" [ stop ]
 
-  if ranger-strategy = "crusader" [
-    set current-protected-ids top-biomass-cell-ids (patches with [biomass >= 2]) protected-area-limit
-  ]
+  if ranger-strategy != "no-action" [
 
-  if ranger-strategy = "negotiator" [
-    let chosen top-biomass-cell-ids (patches with [biomass = 2]) protected-area-limit
-    if length chosen < protected-area-limit [
-      let missing protected-area-limit - length chosen
-      let extra top-biomass-cell-ids (patches with [biomass >= 2 and not member? cell-id chosen]) missing
-      set chosen sentence chosen extra
+    if ranger-strategy = "crusader" [
+      let candidates patches with [biomass >= 2]
+      if any? candidates [
+        let chosen []
+        let remaining candidates
+
+        while [length chosen < protected-area-limit and any? remaining] [
+          let p max-one-of remaining [biomass]
+          set chosen lput ([cell-id] of p) chosen
+          set remaining remaining with [self != p]
+        ]
+
+        set current-protected-ids chosen
+      ]
     ]
-    set current-protected-ids chosen
-  ]
 
-  if ranger-strategy = "naturalist" [
-    set current-protected-ids top-naturalist-cell-ids protected-area-limit
-  ]
+    if ranger-strategy = "negotiator" [
+      let candidates patches with [biomass = 2]
+      if any? candidates [
+        let chosen []
+        let remaining candidates
 
-  if ranger-strategy = "manager" [
-    set current-protected-ids manager-cluster protected-area-limit
-  ]
+        while [length chosen < protected-area-limit and any? remaining] [
+          let p one-of remaining
+          set chosen lput ([cell-id] of p) chosen
+          set remaining remaining with [self != p]
+        ]
 
-  ask patches with [member? cell-id current-protected-ids] [
-    set protected? true
+        set current-protected-ids chosen
+      ]
+    ]
+
+    if ranger-strategy = "naturalist" [
+      let candidates patches with [biomass >= 2]
+      if any? candidates [
+        let chosen []
+        let remaining candidates
+
+        while [length chosen < protected-area-limit and any? remaining] [
+          let p max-one-of remaining [(previous-newborns * 10) + biomass]
+          set chosen lput ([cell-id] of p) chosen
+          set remaining remaining with [self != p]
+        ]
+
+        set current-protected-ids chosen
+      ]
+    ]
+
+    if ranger-strategy = "manager" [
+      set current-protected-ids manager-cluster protected-area-limit
+    ]
+
+    ask patches with [member? cell-id current-protected-ids] [
+      set protected? true
+    ]
   ]
 end
 
@@ -426,8 +465,21 @@ end
 
 to update-patch-labels
   ask patches [
-    set plabel (word biomass " | H" length scheduled-households " | B" newborns-last-round)
+    set plabel biomass
     set plabel-color black
+  ]
+end
+
+to update-protection-markers
+  ask markers [die]
+  ask patches with [protected?] [
+    sprout-markers 1 [
+      set shape "circle"
+      set size 2
+      set color black
+      set heading 0
+      set label ""
+    ]
   ]
 end
 
@@ -440,6 +492,8 @@ to record-trajectory-row
     count patches with [protected?]
     count patches with [nesting?]
     count patches with [harvested-this-round?]
+    count markers
+    cumulative-protection-markers
     communication?
     household-strategy-mode
     ranger-strategy
@@ -454,13 +508,13 @@ end
 
 to export-current-trajectory [file-name]
   let rows sentence
-    (list ["round" "total_biomass" "cumulative_harvest" "cumulative_newborns" "protected_cells" "nesting_cells" "harvested_cells" "communication" "household_strategy_mode" "ranger_strategy" "household_count" "harvesters_per_household" "protected_area_compliance" "coordination_strength" "poacher_share"])
+    (list ["round" "total_biomass" "cumulative_harvest" "cumulative_newborns" "protected_cells" "nesting_cells" "harvested_cells" "current_markers" "cumulative_protection_markers" "communication" "household_strategy_mode" "ranger_strategy" "household_count" "harvesters_per_household" "protected_area_compliance" "coordination_strength" "poacher_share"])
     trajectory-data
   csv:to-file file-name rows
 end
 
 to run-monte-carlo [repetitions file-prefix]
-  let all-rows (list ["run" "round" "total_biomass" "cumulative_harvest" "cumulative_newborns" "protected_cells" "nesting_cells" "harvested_cells" "communication" "household_strategy_mode" "ranger_strategy" "household_count" "harvesters_per_household" "protected_area_compliance" "coordination_strength" "poacher_share"])
+  let all-rows (list ["run" "round" "total_biomass" "cumulative_harvest" "cumulative_newborns" "protected_cells" "nesting_cells" "harvested_cells" "current_markers" "cumulative_protection_markers" "communication" "household_strategy_mode" "ranger_strategy" "household_count" "harvesters_per_household" "protected_area_compliance" "coordination_strength" "poacher_share"])
 
   let run-id 1
   while [run-id <= repetitions] [
@@ -490,18 +544,18 @@ to-report assign-household-strategy
 end
 
 to refresh-household-strategies-from-input
-  if household-strategy-mode != "input-list" [ stop ]
+  if household-strategy-mode = "input-list" [
+    let parsed-strategies parsed-household-strategy-list
 
-  let parsed-strategies parsed-household-strategy-list
-
-  ask households [
-    if hid <= length parsed-strategies [
-      set strategy item (hid - 1) parsed-strategies
+    ask households [
+      if hid <= length parsed-strategies [
+        set strategy item (hid - 1) parsed-strategies
+      ]
+      if hid > length parsed-strategies [
+        set strategy "maximizer"
+      ]
+      set label (word "H" hid ":" strategy)
     ]
-    if hid > length parsed-strategies [
-      set strategy "maximizer"
-    ]
-    set label (word "H" hid ":" strategy)
   ]
 end
 
@@ -522,6 +576,14 @@ to-report parsed-household-strategy-list
   report parsed
 end
 
+to-report current-protection-markers
+  report count markers
+end
+
+to-report cumulative-protected-cells
+  report cumulative-protection-markers
+end
+
 to-report round-harvest
   report sum [harvest-last-round] of households
 end
@@ -537,19 +599,6 @@ to-report summary
     (word "harvest=" cumulative-harvest)
     (word "newborns=" cumulative-newborns)
   )
-end
-
-to-report top-biomass-cell-ids [candidate-patches limit-cells]
-  let chosen []
-  let remaining candidate-patches
-
-  while [length chosen < limit-cells and any? remaining] [
-    let p max-one-of remaining [biomass]
-    set chosen lput [cell-id] of p chosen
-    set remaining remaining with [self != p]
-  ]
-
-  report chosen
 end
 
 to-report top-naturalist-cell-ids [limit-cells]
@@ -728,10 +777,10 @@ PENS
 "default" 1.0 0 -16777216 true "" "plot cumulative-newborns"
 
 PLOT
-237
-222
-437
-372
+657
+163
+857
+313
 round-harvest
 NIL
 NIL
@@ -755,46 +804,44 @@ household-strategy-mode
 "input-list" "mixed" "maximizer" "lone-rider" "explorer" "poacher" "fixed-plan" "sobriety"
 0
 
-SLIDER
-27
-201
-199
-234
-household-count
-household-count
-0
-5
-5.0
-1
-1
-NIL
-HORIZONTAL
-
-SLIDER
-25
-237
-203
-270
-harvesters-per-household
-harvesters-per-household
-0
-4
-4.0
-1
-1
-NIL
-HORIZONTAL
-
 INPUTBOX
-25
-382
-415
-442
+35
+250
+425
+310
 household-strategy-input
-[\"maximizer\" \"maximizer\" \"poacher\" \"lone-rider\" \"sobriety\"]
+[\"maximizer\" \"maximizer\" \"explorer\" \"lone-rider\" \"sobriety\"]
 1
 0
 String
+
+CHOOSER
+34
+197
+172
+242
+ranger-strategy
+ranger-strategy
+"manager" "crusader" "negotiator" "naturalist" "no-action"
+1
+
+PLOT
+657
+11
+857
+161
+cumulative-protection-markers
+NIL
+NIL
+0.0
+10.0
+0.0
+10.0
+true
+false
+"" ""
+PENS
+"default" 1.0 0 -16777216 true "" "plot cumulative-protection-markers"
 
 @#$#@#$#@
 ## WHAT IS IT?
