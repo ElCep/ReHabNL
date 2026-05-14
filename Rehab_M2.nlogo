@@ -1,5 +1,5 @@
 ; File: models/ReHab.nlogo
-extensions [csv]
+;extensions [csv]
 
 breed [households household]
 breed [markers marker]
@@ -7,6 +7,9 @@ breed [markers marker]
 globals [
   household-count
   harvesters-per-household
+
+  household-strategy-list
+
   round-number
   max-rounds
   total-harvesters
@@ -61,6 +64,9 @@ end
 to setup-defaults
   set household-count 5
   set harvesters-per-household 4
+  if household-strategy-mode = "input-list" [
+  set household-strategy-list read-from-string household-strategy-input
+]
   if not is-number? max-rounds [ set max-rounds 5 ]
   if not is-number? household-count [ set household-count 5 ]
   if not is-number? protected-area-limit [ set protected-area-limit 3 ]
@@ -506,30 +512,30 @@ to record-trajectory-row
   set trajectory-data lput row trajectory-data
 end
 
-to export-current-trajectory [file-name]
-  let rows sentence
-    (list ["round" "total_biomass" "cumulative_harvest" "cumulative_newborns" "protected_cells" "nesting_cells" "harvested_cells" "current_markers" "cumulative_protection_markers" "communication" "household_strategy_mode" "ranger_strategy" "household_count" "harvesters_per_household" "protected_area_compliance" "coordination_strength" "poacher_share"])
-    trajectory-data
-  csv:to-file file-name rows
-end
-
-to run-monte-carlo [repetitions file-prefix]
-  let all-rows (list ["run" "round" "total_biomass" "cumulative_harvest" "cumulative_newborns" "protected_cells" "nesting_cells" "harvested_cells" "current_markers" "cumulative_protection_markers" "communication" "household_strategy_mode" "ranger_strategy" "household_count" "harvesters_per_household" "protected_area_compliance" "coordination_strength" "poacher_share"])
-
-  let run-id 1
-  while [run-id <= repetitions] [
-    random-seed fresh-seed
-    setup
-    go-until-end
-    foreach trajectory-data [
-      row ->
-      set all-rows lput (fput run-id row) all-rows
-    ]
-    set run-id run-id + 1
-  ]
-
-  csv:to-file (word file-prefix ".csv") all-rows
-end
+;to export-current-trajectory [file-name]
+;  let rows sentence
+;    (list ["round" "total_biomass" "cumulative_harvest" "cumulative_newborns" "protected_cells" "nesting_cells" "harvested_cells" "current_markers" "cumulative_protection_markers" "communication" "household_strategy_mode" "ranger_strategy" "household_count" "harvesters_per_household" "protected_area_compliance" "coordination_strength" "poacher_share"])
+;    trajectory-data
+;  csv:to-file file-name rows
+;end
+;
+;to run-monte-carlo [repetitions file-prefix]
+;  let all-rows (list ["run" "round" "total_biomass" "cumulative_harvest" "cumulative_newborns" "protected_cells" "nesting_cells" "harvested_cells" "current_markers" "cumulative_protection_markers" "communication" "household_strategy_mode" "ranger_strategy" "household_count" "harvesters_per_household" "protected_area_compliance" "coordination_strength" "poacher_share"])
+;
+;  let run-id 1
+;  while [run-id <= repetitions] [
+;    random-seed fresh-seed
+;    setup
+;    go-until-end
+;    foreach trajectory-data [
+;      row ->
+;      set all-rows lput (fput run-id row) all-rows
+;    ]
+;    set run-id run-id + 1
+;  ]
+;
+;  csv:to-file (word file-prefix ".csv") all-rows
+;end
 
 to-report assign-household-strategy
   if household-strategy-mode != "mixed" [ report household-strategy-mode ]
@@ -560,20 +566,18 @@ to refresh-household-strategies-from-input
 end
 
 to-report parsed-household-strategy-list
-  let parsed read-from-string household-strategy-input
-
-  if not is-list? parsed [
-    error "household-strategy-input doit être une liste NetLogo valide"
+  if not is-list? household-strategy-list [
+    error "household-strategy-list doit être une liste NetLogo valide"
   ]
 
-  foreach parsed [
+  foreach household-strategy-list [
     s ->
     if not member? s ["maximizer" "poacher" "lone-rider" "sobriety" "explorer" "fixed-plan"] [
       error (word "strategie inconnue: " s)
     ]
   ]
 
-  report parsed
+  report household-strategy-list
 end
 
 to-report current-protection-markers
@@ -663,8 +667,8 @@ end
 GRAPHICS-WINDOW
 204
 10
-436
-198
+437
+199
 -1
 -1
 45.0
@@ -707,10 +711,10 @@ NIL
 BUTTON
 120
 84
-183
+184
 117
-NIL
-go
+GO 6
+while [ticks < 6] [\n  go\n]
 NIL
 1
 T
@@ -810,7 +814,7 @@ INPUTBOX
 425
 310
 household-strategy-input
-[\"maximizer\" \"maximizer\" \"explorer\" \"lone-rider\" \"sobriety\"]
+[\"sobriety\" \"sobriety\" \"maximizer\" \"explorer\" \"sobriety\"]
 1
 0
 String
@@ -823,7 +827,7 @@ CHOOSER
 ranger-strategy
 ranger-strategy
 "manager" "crusader" "negotiator" "naturalist" "no-action"
-1
+2
 
 PLOT
 657

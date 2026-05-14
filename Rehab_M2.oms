@@ -1,0 +1,73 @@
+
+/*
+This is skeleton to plug your model into OpenMOLE. To go further you should complete it.
+Define some hook, some exploration methods, and optionally some execution environment.
+To do all that please refer to the OpenMOLE documentation.
+*/
+
+val householdStrategyMode = Val[String]
+val householdStrategyInput = Val[String]
+val rangerStrategy = Val[String]
+
+val mySeed = Val[Int]
+
+// OUPTUT
+val totalBiomass = Val[Int]
+val cumulativeProtectionMarkers = Val[Int]
+val cumulativeHarvest = Val[Int]
+val roundHarvest = Val[Int]
+val cumulativeNewborns = Val[Int]
+
+
+
+val rehab_M2Task = NetLogo6Task(
+  workDirectory / "Rehab_M2.nlogo",
+  Seq(
+    "setup",
+    "let i 0 while [i < 5] [ go set i i + 1 ]"
+  ),
+  seed = mySeed
+) set (
+  inputs += householdStrategyMode mapped "household-strategy-mode",
+  inputs += householdStrategyInput mapped "household-strategy-input",
+  inputs += rangerStrategy mapped "ranger-strategy",
+  outputs += householdStrategyMode,
+  outputs += householdStrategyInput,
+  outputs += rangerStrategy,
+  
+  outputs += totalBiomass mapped "total-biomass",
+  outputs += cumulativeProtectionMarkers mapped "cumulative-protection-markers",
+  outputs += cumulativeHarvest mapped "cumulative-harvest",
+  outputs += roundHarvest mapped "round-harvest",
+  outputs += cumulativeNewborns mapped "cumulative-newborns",
+  
+  householdStrategyMode := "input-list",
+  householdStrategyInput :=
+    """["maximizer" "maximizer" "explorer" "lone-rider" "sobriety"]""",
+  rangerStrategy := "manager"
+)
+
+
+val exploration =
+  DirectSampling(
+    evaluation = rehab_M2Task,
+    sampling =
+      (mySeed in (0 until 10)) x
+      (rangerStrategy in Seq("manager", "crusader"))
+  )
+
+val workflow =
+  exploration hook CSVHook(
+    workDirectory / "results.csv",
+    values = Seq(
+      mySeed,
+      rangerStrategy,
+      totalBiomass,
+      cumulativeProtectionMarkers,
+      cumulativeHarvest,
+      roundHarvest,
+      cumulativeNewborns
+    )
+  )
+
+workflow

@@ -1,0 +1,96 @@
+val mySeed = Val[Int]
+
+val householdStrategyMode = Val[String]
+val householdStrategyInput = Val[String]
+val rangerStrategy = Val[String]
+
+val cumulativeHarvest = Val[Double]
+val cumulativeNewborns = Val[Double]
+
+val householdStrategies =
+  Seq(
+    "maximizer",
+    "lone-rider",
+    "explorer",
+    "poacher",
+    "sobriety"
+  )
+
+def netLogoList(values: Seq[String]) =
+  values.map(v => "\"" + v + "\"").mkString("[", " ", "]")
+
+val householdStrategyInputs =
+  for {
+    s1 <- householdStrategies
+    s2 <- householdStrategies
+    s3 <- householdStrategies
+    s4 <- householdStrategies
+    s5 <- householdStrategies
+  } yield netLogoList(Seq(s1, s2, s3, s4, s5))
+
+val rangerStrategies =
+  Seq(
+    "manager",
+    "crusader",
+    "negotiator",
+    "naturalist",
+    "no-action"
+  )
+
+val rehab_M2Task = NetLogo6Task(
+  workDirectory / "Rehab_M2.nlogo",
+  Seq(
+    "setup",
+    "let i 0 while [i < 5] [ go set i i + 1 ]"
+  ),
+  seed = mySeed
+) set (
+  inputs += mySeed,
+
+  inputs += householdStrategyMode mapped "household-strategy-mode",
+  inputs += householdStrategyInput mapped "household-strategy-input",
+  inputs += rangerStrategy mapped "ranger-strategy",
+
+  outputs += cumulativeHarvest mapped "cumulative-harvest",
+  outputs += cumulativeNewborns mapped "cumulative-newborns",
+
+  householdStrategyMode := "input-list"
+)
+
+val pse =
+  PSEEvolution(
+    evaluation = rehab_M2Task,
+    parallelism = 50,
+    termination = 100000,
+
+    genome = Seq(
+      householdStrategyInput in householdStrategyInputs,
+      rangerStrategy in rangerStrategies
+    ),
+
+    objective = Seq(
+  cumulativeHarvest aggregate
+    "percentile(cumulativeHarvest.toSeq, 95.0)" in (0.0 to 100000.0 by 100.0),
+
+  cumulativeNewborns aggregate
+    "percentile(cumulativeNewborns.toSeq, 95.0)" in (0.0 to 100000.0 by 100.0)
+),
+
+    stochastic = Stochastic(seed = mySeed)
+  )by Island(50)
+
+val workflow =
+  pse hook (
+    workDirectory / "pse-results",
+    frequency = 10,
+    keepAll = true,
+    keepHistory = true
+  )
+
+val env =
+  MiniclustEnvironment(
+    "edelay",
+    "https://babar.openmole.org"
+  )
+
+workflow on env
